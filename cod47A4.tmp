@@ -1,0 +1,69 @@
+extends Control
+
+@onready var file_tree: Tree = $HSplitContainer/Tree
+@onready var code_edit: CodeEdit = $HSplitContainer/CodeEdit
+
+var current_file_path: String = ""
+
+func _ready():
+	populate_file_tree("res://")
+
+func populate_file_tree(path: String, parent: TreeItem = null):
+	var dir = DirAccess.open(path)
+	if dir == null:
+		return
+
+	var current_item = file_tree.create_item(parent)
+	current_item.set_text(0, path.get_file())
+	current_item.set_metadata(0, path)
+
+	dir.list_dir_begin()
+	var file_name = dir.get_next()
+	while file_name != "":
+		if file_name.begins_with(".") or file_name == ".import":
+			file_name = dir.get_next()
+			continue
+
+		var full_path = path.path_join(file_name)
+		if dir.current_is_dir():
+			populate_file_tree(full_path, current_item)
+		else:
+			var file_item = file_tree.create_item(current_item)
+			file_item.set_text(0, file_name)
+			file_item.set_metadata(0, full_path)
+		file_name = dir.get_next()
+	dir.list_dir_end()
+
+func _on_tree_item_selected():
+	var selected = file_tree.get_selected()
+	if selected:
+		var path = selected.get_metadata(0)
+		if path.ends_with(".gd") or path.ends_with(".txt") or path.ends_with(".json"):
+			load_file_to_editor(path)
+
+func load_file_to_editor(path: String):
+	var file = FileAccess.open(path, FileAccess.READ)
+	if file:
+		var text = file.get_as_text()
+		code_edit.text = text
+		code_edit.set_caret_line(0)
+		code_edit.set_caret_column(0)
+		code_edit.grab_focus()
+		current_file_path = path
+
+func save_file():
+	if current_file_path == "":
+		print("No file loaded.")
+		return
+	var file = FileAccess.open(current_file_path, FileAccess.WRITE)
+	if file:
+		file.store_string(code_edit.text)
+		print("Saved:", current_file_path)
+		
+		ToastParty._add_new_label({text = "Saved"})
+		
+
+func _unhandled_input(event):
+	if event is InputEventKey and event.pressed:
+		if event.ctrl_pressed and event.keycode == KEY_S:
+			save_file()
